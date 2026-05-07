@@ -23,10 +23,10 @@ Commands:
   help       Show this help message
 
 Environment variables:
-  AZ_CLIENT_ID         Azure Service Principal client ID
-  AZ_CLIENT_SECRET     Azure Service Principal client secret
-  AZ_TENANT_ID         Azure tenant ID
-  AZ_SUBSCRIPTION_ID   Azure subscription ID
+  ARM_CLIENT_ID         Azure Service Principal client ID
+  ARM_CLIENT_SECRET     Azure Service Principal client secret
+  ARM_TENANT_ID         Azure tenant ID
+  ARM_SUBSCRIPTION_ID   Azure subscription ID
   TF_VAR_project_name   Terraform project_name variable override
   TF_VAR_location       Terraform location variable override
   TF_VAR_environment    Terraform environment variable override
@@ -34,17 +34,43 @@ EOF
 }
 
 check_azure_env() {
-  local missing=()
-  for var in AZ_CLIENT_ID AZ_CLIENT_SECRET AZ_TENANT_ID AZ_SUBSCRIPTION_ID; do
+  # Check if ARM_* variables are set
+  local arm_vars_set=true
+  for var in ARM_CLIENT_ID ARM_CLIENT_SECRET ARM_TENANT_ID ARM_SUBSCRIPTION_ID; do
     if [[ -z "${!var:-}" ]]; then
-      missing+=("$var")
+      arm_vars_set=false
+      break
     fi
   done
 
-  if [[ ${#missing[@]} -gt 0 ]]; then
-    echo "Error: missing required Azure auth environment variables: ${missing[*]}"
-    echo "Set the Azure service principal values before running this script."
-    exit 1
+  # If ARM variables are not set, check if Azure CLI is authenticated
+  if [[ "$arm_vars_set" == "false" ]]; then
+    if ! command -v az &> /dev/null; then
+      echo "Error: Azure CLI not found. Install it or set ARM_* environment variables."
+      echo ""
+      echo "To install Azure CLI:"
+      echo "curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash  # Linux"
+      echo "# or download from https://docs.microsoft.com/en-us/cli/azure/install-azure-cli"
+      exit 1
+    fi
+
+    if ! az account show &> /dev/null; then
+      echo "Error: Not authenticated with Azure CLI. Run 'az login' or set ARM_* environment variables."
+      echo ""
+      echo "To authenticate with Azure CLI:"
+      echo "az login"
+      echo ""
+      echo "Or set service principal environment variables:"
+      echo "export ARM_CLIENT_ID='your-client-id'"
+      echo "export ARM_CLIENT_SECRET='your-client-secret'"
+      echo "export ARM_TENANT_ID='your-tenant-id'"
+      echo "export ARM_SUBSCRIPTION_ID='your-subscription-id'"
+      exit 1
+    fi
+
+    echo "Using Azure CLI authentication"
+  else
+    echo "Using service principal authentication"
   fi
 }
 
